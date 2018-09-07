@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ##question 3
 (a) 
-To download the data into the subdirectory, I first created a new directory called "temp", then I used a loop for years from 2011 to 2017, used "curl" to download data from the specified year, used "gunzip" to unzip the file, and used "wc" to count the number of observations for each year and print on the screen.
+To download the data into the subdirectory, I first created a new directory called "temp", then I used a loop for years from 2015 to 2017, used "curl" to download data from the specified year, used "gunzip" to unzip the file, and used "wc" to count the number of observations for each year and print on the screen.
 ```{bash}
 ##creat new subdirectory
 mkdir ~/temp
