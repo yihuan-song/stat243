@@ -1,0 +1,212 @@
+---
+title: "ps2"
+author: "Yihuan Song"
+date: "9/9/2018"
+output:
+
+  pdf_document: 
+    keep_tex: yes
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## question 1
+  For my code in question 3, the good programming practices learned from unit 5 includes: the use of indentation and white space(blank lines) to make the structure of functions clear and readable; the use of header for the functions in order to specify the input, output and intention of the function; the use of comments to explain what the code is doing and summarize a block of code; careful use of naming style to avoid conflicts with functions that already exist(for example, there is a function named "citation" in r, therefore the function I wrote should not be named as "citation").
+
+## question 2
+(a) 
+  For the CSV text file,  since the file size is 133887710, we know that the characters in CSV files are in ascii format, and one character takes one byte, so 133887710 characters are expected to be in the file. (The data is stored in character as "x.xxxxxxxxxx,", so it takes 13 character to store one data, so it takes 13 bytes to store one data).
+  For the Rda file, since the file size is 80000087, and the data is in binary, so we know that the number of data is 80000000/8 = 10000000.
+  The size difference between the csv file and the rda file is because that the data in the csv file is stored in ascii format and the data the the rda file is in binary format, so the rda file has a smaller size.
+(b) 
+  The file size is unchanged, because the first csv file is in matrix form, which is comma delimited, and each comma is used to seperate each piece of data. Changing the data from a matrix to a single column would not change the number of characters of the file, because changing to one column of data would just substitute the commas by the same number of new line characters, so there is no less file size.
+
+(c) 
+  For the first comparison, the speed is different between read.csv() and scan(), because the function scan() just reads numeric data one by one ignoring lines, which is faster and more efficient than read.csv().
+  For the second comparison, the speed difference between read.csv() and scan() is much smaller, because specifying the "colClasses = 'numeric'" would help the read.csv() function identify the data to be read in as numeric format, so that it increases the efficiency for reading data.
+  For the third comparison, the speed is different between using scan() to read in the csv file and using load() to read in the rda file, and the speed to load the rda file(binary format) is much faster than reading in the csv file(ascii format). The rda file in binary format is easier for R to process the data, and has less file size, so it reads data faster.
+
+(d) 
+  tmp1.Rda is much bigger than tmp2.Rda, because the data in the temp.Rda is generated using a matirx format, while the data in the tmp2.Rda is generated using rep(), so it is in general numeric format, not stored as a matrix, which takes up less space. Therefore, the tmp1.Rda is larger than tmp2.Rda because of the different formatting of data.
+
+## question 3
+3. 
+(a) 
+  In the function "researcher_page", the function would take the researcher's name as input string, and return the citation page and Google Scholar ID of the researcher. First, the function would create the url to the searching page of the scholar. By using the developer's tool on Google Scholar's webpage, the "read_html" and "html_nodes" functions would provide a list of nodes with attribute "href" at a specific div ID that provides the citation page information in the scholar-searching page. After inspecting the list of nodes, we could find out the Google scholar ID and the link to citation page for the specified scholar. After that, we could again use the "read_html" to get the html text for the citation page, and print out the page url and scholar's id.
+```{r, error=FALSE}
+#load required packages for the rest of the question
+library(xml2)
+library(rvest)
+library(testthat)
+library(assertthat)
+library(knitr)
+library(kableExtra)
+
+researcher_page <- function(name) {
+    # search for the citation page on Google Scholar of a specified researcher
+    #
+    # Arguments:
+    #     researcher: a character string of the name of the researcher
+    #     
+    # Returns:
+    #     The html text corresponding to the researcher's citation page 
+    #     and the Google scholar ID of the researcher
+  
+  #reformat user input to create url for the search page of a scholar
+    nm<-sub(" ", "+", name)
+    baseurl1_1 <- "https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q="
+    baseurl1_2 <- "&btnG=" 
+    baseurl2 <- "https://scholar.google.com"
+    url1<-paste0(baseurl1_1, nm, baseurl1_2)
+    
+  #using the html of the scholar's search page to find out the url and user-ID on the citation page
+    listOfNodes <- read_html(url1) %>% html_nodes("div.gs_r") %>% html_nodes("a") %>% html_attr('href')
+    Sys.sleep(3)
+    url2 <- paste(baseurl2, strsplit(listOfNodes, " ")[[2]], sep="")
+    userID <- strsplit(url2, "=")[[1]][2]
+    
+  #get the html and user id on the citation page, printing out the url and user ID
+    research_html <- read_html(url2)
+    cat("The researcher’s Google Scholar ID is", userID)
+    cat("\nThe researcher’s citation page is\n", url2)
+    return(research_html)
+}
+
+resch_html <- researcher_page("Trevor Hastie")
+```
+
+(b) 
+  The create_table function takes the html prepared by part a) and creates an R data frame that contains the article title, authors, journal information, year of publication, and number of citations. Specifically, it first created 5 empty lists corresponding to the 5 columns of information required. Then the lists are filled by for loop going through each citation, selecting information from the html by "html_nodes" and "html_text", where the path to the node is generated by using the "copy as select" in Google's developer tools. After generating the 5 lists, combine them to a dataframe by "as.data.frame". The printing of tables used "kable" in the "knitr" package, and a second scholar's citation table is generated in order to provide more confidence that the function works properly.
+```{r}
+citation_table <- function(html) {
+    
+    #Usage:
+    #process the resulting HTML to create an R data frame that contains 
+    #the article title, authors, journal information, year of publication, 
+    #and number of citations
+    #
+    # Arguments:
+    #     html: the html file stored in part a)
+    #     
+    # Returns:
+    #     The dataframe containing information for each citation
+  
+  #creating lists to be filled by citaion information
+    author <- list()
+    title <- list()
+    journal <- list()
+    year <- list()
+    cited <- list()
+ 
+  #looping for each citation on the citation page to create lists with information on 
+  #author,title, journal information, year of publication and number of citations   
+    
+    for (i in 1:20){
+    #using developer's tool, find out the selection path for each citation
+        path_auth <- paste0("#gsc_a_b > tr:nth-child(",i,") > td.gsc_a_t > div:nth-child(2)")
+        path_tit <- paste0("#gsc_a_b > tr:nth-child(",i,") > td.gsc_a_t > a")
+        path_jour <- paste0("#gsc_a_b > tr:nth-child(",i,") > td.gsc_a_t > div:nth-child(3)")
+        path_year <- paste0("#gsc_a_b > tr:nth-child(",i,") > td.gsc_a_y > span")
+        path_num <- paste0("#gsc_a_b > tr:nth-child(",i,") > td.gsc_a_c > a")
+    #by specifying selection path, find the required information inside the html
+        auth <- html %>% html_node(path_auth) %>% html_text()
+        tit <- html %>% html_node(path_tit) %>% html_text()
+        jour <- html %>% html_node(path_jour) %>% html_text()
+        yr <- html %>% html_node(path_year) %>% html_text()
+        num <- html %>% html_node(path_num) %>% html_text()
+    #put each citation's information in the lists
+        author[[i]] <- auth
+        title[[i]] <- tit
+        journal[[i]] <- jour
+        year[[i]] <- yr
+        cited[[i]] <- num
+        
+    }
+    
+    #create the data frame by combining the 5 lists
+    resch_table <- as.data.frame(cbind(author, title, year, cited, journal))
+    return(resch_table)
+}
+
+#sample citation dataframe for "Trevor Hastie"
+table_researcher1<-citation_table(resch_html)
+kable(table_researcher1) %>%  kable_styling(latex_options="scale_down")
+
+#sample citation dataframe for "Hui Zou"
+resch_html2 <- researcher_page("Hui Zou")
+table_researcher2<-citation_table(resch_html2)
+kable(table_researcher2) %>% kable_styling(latex_options="scale_down")
+
+```
+
+(c) 
+  Based on the function in part a), I included an "if" statement to first check if the user gives a string in the input. Then, by using the assertthat package, I created "on_failure" function and used "assert_that" to make sure the function fails with reminder message if there is no scholar found in Google Scholar accoring to the user's input. I also used the testthat package to write test functions to check the function returning the citation page("citation_assert") and the function creating citation table("citation_table") returns reasonable results.
+
+```{r,error=TRUE}
+citation_assert <- function(name) {
+  #adding "if" statement to check user inputs a string
+  if (class(name) != "character"){
+    print("Invalid input, please input a scholar's full name")
+  } else{
+  #same as the "researcher_page" function in part a), despite some assertions added
+    nm<-sub(" ", "+", name)
+    baseurl1_1 <- "https://scholar.google.com/scholar?hl=en&as_sdt=0%2C5&q="
+    baseurl1_2 <- "&btnG=" 
+    baseurl2 <- "https://scholar.google.com"
+    url1<-paste0(baseurl1_1, nm, baseurl1_2)
+  #Developer's tool to find and select the node to the scholar's profile page in the html
+    selector <- "#gs_res_ccl_mid > div:nth-child(1) > h3 > a"
+    test_node <- read_html(url1) %>% html_node(selector)
+    Sys.sleep(3)
+  #test to see if the scholar's profile(the test node) exists
+    test <- function(test_node){
+    length(test_node) != 0
+    }
+  #provide message to user if the scholar cannot be found
+  on_failure(test) <- function(call, env) {
+     paste0(name, " is not in Google Scholar")
+  }
+  #assert the tested node, quit if scholar not found
+  assert_that(test(test_node))
+  Sys.sleep(3)
+  #rest is same as part a)
+  listOfNodes <- read_html(url1) %>% html_nodes("div.gs_r") %>% html_nodes("a") %>% html_attr('href')
+  Sys.sleep(3)
+  url2 <- paste(baseurl2, strsplit(listOfNodes, " ")[[2]], sep="")
+  research_html <- read_html(url2)
+  userID <- strsplit(url2, "=")[[1]][2]
+  cat("\nThe researcher’s Google Scholar ID is", userID)
+  cat("\nThe researcher’s citation page is:\n", url2)
+  return(research_html)
+  }
+}
+
+#sample results: "fake name" should throw error with specific message to user, 
+#"Trevor Hastie" should function properly, and inputting number should fail and show message to user
+citation_assert(1)
+citation_assert("fake name")
+citation_assert("Trevor Hastie")
+
+#test if the functions' results are in appropriate class and length
+test_that("citation_assert() returns a non-empty html text", {
+  
+  expect_true(length(citation_assert("Trevor Hastie")) != 0 )
+  expect_is(citation_assert("Trevor Hastie"), 'xml_node')
+})
+
+test_that("citation_table() returns a non-empty dataframe", {
+  
+  expect_true(length(citation_table(resch_html)) != 0 )
+  expect_is(citation_table(resch_html), 'data.frame')
+})
+
+```
+
+## question 4
+  From the robots.txt file for Google Scholar, we see that the file specifies "Allow: /citations?user=", which means that the kind of data scraping of the citation page for a specific researcher can be considered as ethical. The robots.txt also specifies "Disallow: /scholar", which is the scrapping I use to find out the user ID, but since our purpose is not to request actural data from the search page for scholars, we are not actually violating Google's rules in problem 3. Furthermore, while I am scraping the citation page, my function makes consecutive quries in a short time, so in order not to be considered as a robot, I used Sys.sleep() to make sure that there are delays between successive requests, which is also avoiding the violation of general scraping ethics for sending large volume of requests at a short time.
+  
+
+
