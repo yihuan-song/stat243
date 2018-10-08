@@ -1,0 +1,287 @@
+---
+title: "ps4"
+author: "Yihuan Song"
+date: "9/30/2018"
+output:
+
+  pdf_document: 
+    keep_tex: yes
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## question 1
+When one runs make_container(), the function bootmeans() is returned. The enclosing environment for make_container() is the global environment, and bootmeans is defined inside of make_container(), and the enclosing environment for bootmeans() is the make_container() function. For the function bootmeans, the values of x and i will be looked up in the environment of make_container(). If we execute bootmeans(), the function will see if the value passed in(which, in this case, is the mean of 272 data sampled from data with replacement) is null, if it is null, the function returns x, which is a vector of length n(in this case, nboot = 100) consisting of zeros; if the value is not null, the value, which is the computed mean, will be the ith element of vector x. Since the bootmeans() function modifies the x vector in the environment of make_container, and carries the modified x vector as it returns, this is a function that “contains” data. If n = 1000000, bootmeans uses 8000848 bytes of memory.
+
+```{r}
+library(pryr)
+library(rbenchmark)
+library(knitr)
+
+make_container <- function(n) { 
+  x <- numeric(n)
+  i <- 1
+  function(value = NULL) {
+    if (is.null(value)) {
+      return(x) } else {
+      x[i] <<- value
+      i <<- i + 1
+    } }
+}
+nboot <- 100
+bootmeans <- make_container(nboot)
+data <- faithful[ , 1]
+for (i in 1:nboot)
+  bootmeans(mean(sample(data, length(data), replace=TRUE)))
+bootmeans()
+
+#checking out the environment of functions
+environment(make_container)
+environment(bootmeans)
+
+#finding out size when n=1000000
+
+num <- 1000000
+bootmeans <- make_container(num)
+for (i in 1:num)
+  bootmeans(mean(sample(data, length(data), replace=TRUE)))
+object_size(bootmeans())
+```
+
+## question 2
+To make the solution faster, I first generated a matrix of cumulative probabilities using the probability matrix. To avoid using the sample() function, I used the "runif" to generate a random uniform vector of length 100000. Then, I looped by column to compare the uniform matrix with the columns in the cumulative probability matrix, and set the values of the smp to the column index whenever the uniform variable lies in the column of cumulative probability. I timed each method, and found significant improvement in efficiency.
+
+```{r}
+n <- 100000
+p <- 5
+tmp <- exp(matrix(rnorm(n*p), nrow = n, ncol = p))
+probs <- tmp / rowSums(tmp)
+smp <- rep(0, n)
+set.seed(1) 
+system.time(
+  for(i in seq_len(n))
+    smp[i] <- sample(p, 1, prob = probs[i, ])
+)
+
+#faster method
+smp1 <- rep(0,n)
+sums <-probs
+set.seed(1)
+sampler <- runif(n)
+#transform probability matrix into cumulative probabilities
+for(i in 1:4){
+  sums[,i+1] <- rowSums(sums[ , c(i,i+1)])
+}
+
+#Compare each column with uniform sampler, and set the smp values to column index,
+#if the uniform sampler lies in the range of the cumulative probability column
+system.time(
+  for(col in 1:p){
+      smp1[sums[, col] > sampler & smp1 == 0 ] <- col
+  }
+)
+
+
+#comparing efficiency
+benchmark(
+  for(i in seq_len(n))
+      smp[i] <- sample(p, 1, prob = probs[i, ]),
+  for(col in 1:p)
+      smp1[sums[, col] > sampler & smp1 == 0 ] <- col, 
+  replications = 10)
+
+```
+
+## question 3
+(a) The "denom" function will calculate f for each k, and we use sapply to loop through each k, and take the summation. We need to do the calculation on log scale, because if we derictly used the formula f, the calculation would fail because the numbers in the calculation are too large.
+
+```{r}
+#initializing parameters
+p = 0.3
+phi = 0.5
+n=1000
+range <- 1:(n-1)
+
+#function will take k as input, calculate the log-scale of all terms in f and then take the exponent
+#function will return the result of f, based on different k calues
+denom <- function(k){
+  logpow <- k*log(k)+(n-k)*log(n-k)-(n*log(n))
+  log_prob <- (k*phi)*log(p)+((n-k)*phi)*log(1-p)
+  log_denom <- lchoose(n,k) + logpow - phi*logpow +log_prob
+  return(exp(log_denom))
+}
+
+#define denominator when k = 0 and k=n
+denom_1 <- (1-p)^(n*phi)
+denom_n <- p^(n*phi)
+
+sum(sapply( range, denom), denom_1, denom_n)
+
+```
+
+(b) By doing the calculation in a fully vectorized way and benchmarking the two methods, we found that the vectorized way is much more efficient than the apply method. After benchmarking for different values of n, we found that as n gets larger, the speed difference between the loop method and the vectorized method is larger. In other words, the vactorized method's advantage in efficiency gets more and more valuable as n gets larger.
+
+```{r}
+rm(n)
+p = 0.3
+phi = 0.5
+
+cal_denom <- function(n){
+  #define denominator when k = 0 and k=n
+  denom_1 <- (1-p)^(n*phi)
+  denom_n <- p^(n*phi)
+  #set k and ln as matrices that hold values for k and n
+  k <- matrix(1:(n-1))
+  ln <- matrix(rep(n, n-1))
+  #define terms in f using log scales & in a vectorized form
+  logpow <- k*log(k)+(ln-k)*log(ln-k)-(ln*log(ln))
+  log_prob <- (k*phi)*log(p)+((ln-k)*phi)*log(1-p)
+  log_denom <- lchoose(ln,k) + logpow - phi*logpow +log_prob
+  #calculate f and take summations
+  f <- exp(log_denom)
+  result <- sum(f, denom_1, denom_n)
+  return(result)
+}
+
+cal_denom(1000)
+
+#compare time it takes for method in a) and b) for n taking values from 10 to 2000
+benchmark(cal_denom(10), 
+          {
+            n = 10
+            range <- 1:(n-1)
+            denom_1 <- (1-p)^(n*phi)
+            denom_n <- p^(n*phi)
+            sum(sapply( range, denom),denom_1,denom_n)
+          },
+          replications = 100)
+
+benchmark(cal_denom(100), 
+          {
+            n = 100
+            range <- 1:(n-1)
+            denom_1 <- (1-p)^(n*phi)
+            denom_n <- p^(n*phi)
+            sum(sapply( range, denom),denom_1,denom_n)
+          },
+          replications = 100)
+
+benchmark(cal_denom(1000), 
+          {
+            n = 1000
+            range <- 1:(n-1)
+            denom_1 <- (1-p)^(n*phi)
+            denom_n <- p^(n*phi)
+            sum(sapply( range, denom),denom_1,denom_n)
+          },
+          replications = 100)
+          
+benchmark(cal_denom(2000), 
+          {
+            n = 2000
+            range <- 1:(n-1)
+            denom_1 <- (1-p)^(n*phi)
+            denom_n <- p^(n*phi)
+            sum(sapply( range, denom),denom_1,denom_n)
+          },
+          replications = 100)
+        
+
+```
+## question 4
+(a) From the R demonstration below, we can see that if we modify an element of one of the vectors, R will not make copy of the list, since the address is the same before and after the modification. Therefore, R will change in place.
+```{r, eval=FALSE}
+mylist <- list(c(1,2,3),c(4,5,6),c(7,8,9))
+.Internal(inspect(mylist))
+mylist[[1]][[1]] <- 100
+.Internal(inspect(mylist))
+```
+
+###result from r
+```{r, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("1.png")
+```
+
+(b) As we can see from the demonstration in r below, the address did not change when we make a copy of the list, the two lists had the same address. If we change one of the elements of the copied list, the address changed for the modified list, so copy was made when we modified the copied list. However, the address only changed for the modified element in the copied list. From the inspection, we can see that since we changed only the first vector of the copied list, the address for the second and third vector did not change. Therefore, R will only make copy of the vector where modification was specified, and copies of the remaining vectors in the list will not be made.
+```{r, eval=FALSE}
+mylist <- list(c(1,2,3),c(4,5,6),c(7,8,9))
+address(mylist)
+newlist <- mylist
+address(newlist)
+newlist[[1]] <- c(100, 200,300)
+.Internal(inspect(mylist))
+.Internal(inspect(newlist))
+
+```
+###result from r
+```{r, echo=FALSE, out.width = '100%', fig.show='hold'}
+knitr::include_graphics("2.png")
+```
+
+(c) After adding an element to the second list of the copied list, the addresses of the copied list and the second list of the copied list changed, and a new address created for the new element added, but all others did not change. Therefore, only the second list was copied when we were modifying the copied list, and the two lists share all data except for the element being added.
+```{r, eval=FALSE}
+ls_list <- list(list(1,2,3), list(4,5,6), list(7,8,9))
+address(ls_list)
+snd_list <- ls_list
+
+#Add an element to the second list
+snd_list[[2]] <- append(snd_list[[2]], 100)
+
+.Internal(inspect(ls_list))
+
+.Internal(inspect(snd_list))
+```
+###result from r
+```{r, echo=FALSE, out.width = '100%', fig.show='hold'}
+knitr::include_graphics("3.png")
+```
+
+(d) According to "?size.object", "sizes of objects using a compact internal representation may be over-estimated" for the function object.size(). 
+
+From the function .Internal(inspect()) of tmp, we can see that the two elements of tmp share the same address, so the x is NOT copied twice while we were assigning x to tmp[[1]] and tmp[[2]], we only had x to point to both of the elements in the tmp list, so the two elements are from the same place in memory. Since we did not actually make two copies, the size of tmp would not be ~160 MB, it would actually be ~80 MB instead.
+
+```{r}
+tmp <- list()
+x <- rnorm(1e7)
+tmp[[1]] <- x
+tmp[[2]] <- x
+object.size(tmp)
+
+#internal inspection to see addresses
+.Internal(inspect(tmp))
+.Internal(inspect(x))
+
+#try object_size to show 80 MB used
+object_size(tmp)
+```
+
+
+## question 5
+
+In the original question, inside the tmp function, the "load('tmp.Rda')" did not actually load the seed of 1 into the function, which means that it did not work in the environment of the tmp() function. If we set the seed inside the function, we can see that the number became the same as the beginning.
+
+```{r, Error = FALSE}
+set.seed(1)
+save(.Random.seed, file = 'tmp.Rda') 
+rnorm(1)
+load('tmp.Rda')
+rnorm(1)   ## same random number
+
+#original
+tmp <- function() { 
+  load('tmp.Rda') 
+  print(rnorm(1))
+}
+tmp()      ##not the same number
+
+#set seed in the function
+tmp <- function() { 
+  set.seed(1)
+  load('tmp.Rda') 
+  print(rnorm(1))
+}
+tmp()    ##the same number
+```
