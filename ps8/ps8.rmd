@@ -1,0 +1,173 @@
+---
+title: "ps8"
+author: "Yihuan Song"
+date: "11/19/2018"
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## question1
+###(a) 
+Using a sampling density of a normal distribution centered at -4 and truncated, we can see from the histogram that the var($\hat\theta$) is large, since the histogram is very skewed and shows that the weights exist very extreme values. The var($\hat\theta$) is 0.008996.
+```{r}
+m <- 10000 # number of samples for each estimator
+set.seed(0)
+x <- -abs(rnorm(m)) - 4 # sample from g(x) being a half-normal distribution centered at -4
+f <- dt(x, df = 3) / pt(-4, 3)  # density of x under f
+g <- 2*dnorm(x, mean = -4, sd =1, log = FALSE)   # density of x under g
+w <- f / g  # weights
+max(w) # detect outlier
+#create histogram of weight
+hist(w, main = "histogram for weight")
+mean <- mean(x*w)
+mean
+var <- var(x*w) / m  # variance of IS estimator
+var
+```
+###(b) 
+Using a sampling density of a t distribution, with 1 degree of freedom, centered at -4 and truncated, we can see from the histogram that the var($\hat\theta$) is small, since the histogram shows that the weights are not extreme. The var($\hat\theta$) is 0.000999, which is better than the estimation in part (a). 
+```{r}
+m <- 10000 # number of samples for each estimator
+set.seed(0)
+x <- -abs(rt(m, df = 1, ncp = -4) + 4) -4 # sample from g(x) being a half-normal distribution centered at -4
+f <- dt(x, df = 3) / pt(-4, 3)  # density of x under f
+g <- 2*dt(x, df = 1, ncp = -4)   # density of x under g
+w <- f/g  # weights
+max(w)
+#create histogram of weight
+hist(w, main = "histogram for weight")
+mean <- mean(x*w)
+mean
+var <- var(x*w) / m   # variance of IS estimator
+var
+```
+## question2
+Using ggplot's contour function, I ploted how the function of variables x1 and x2 behaves when x3 is set as a sequence of constants. From the plot, we can see that the minimum might occur at around 0. Then, using the "BFGS" method and "Nelder-Mead" method for optim() and using nlm(), the result suggested that the minimum goes to 0, as the (x1,x2,x3) goes to values (1,0,0). Testing out for different starting values suggested that most results converged to the same minimum(which is 0), few result turned out positive values for the "Nelder-Mead" method, and overall it suggested that 0 is the global minimum for f() as (x1,x2,x3) goes to (1,0,0).
+```{r}
+library(ggplot2)
+theta <- function(x1,x2) atan2(x2, x1)/(2*pi)
+f <- function(x) {
+  f1 <- 10*(x[3] - 10*theta(x[1],x[2]))
+  f2 <- 10*(sqrt(x[1]^2 + x[2]^2) - 1)
+  f3 <- x[3]
+  return(f1^2 + f2^2 + f3^2)
+}
+#generate x1 and x2 variables
+x1 <- seq(-15, 15)
+x2 <- seq(-15, 15)
+par(mfrow = c(3,4))
+for(x3 in seq(-15, 15, by = 3)){
+  #combinations of x1 and x2
+  comb <- expand.grid(x1, x2)
+  #generate (x1,x2,x3) to pass to f()
+  df <- cbind(comb,rep(x3, nrow(comb)))
+  vals <- apply(df, 1, f)
+  #generate dataframe containing x1,x2 and the function values
+  #for the contour function
+  all <- cbind.data.frame(comb, vals)
+  names(all) <- c("x1", "x2", "value")
+  print(ggplot(data = all, aes(x = x1, y = x2, z = value)) +
+            geom_contour() + ggtitle(paste0('x3 = ',x3)))
+}
+
+##first set of starting points
+#use optim() with Nelder-Mead
+set.seed(1)
+stp <- runif(3,-10,10) 
+optim(stp, f)
+#use optim() with BFGS
+optim(stp, f, method = 'BFGS')
+#use nlm()
+nlm(f, p = stp)
+
+##second set of starting points
+#use optim() with Nelder-Mead
+set.seed(2)
+stp <- runif(3,-10,10) #different starting points
+optim(stp, f)
+#use optim() with BFGS
+optim(stp, f, method = 'BFGS')
+#use nlm()
+nlm(f, p = stp)
+
+##third set of starting points
+stp <- runif(3,-1000,1000) #different starting points
+optim(stp, f)
+#use optim() with BFGS
+optim(stp, f, method = 'BFGS')
+#use nlm()
+nlm(f, p = stp)
+```
+
+## question3
+(a)
+```{r, echo=FALSE, out.width = '100%', fig.show='hold'}
+knitr::include_graphics("3_a.jpg")
+```
+(b)
+Considering starting values of $\beta$, we can first set $\beta_1=...=\beta_n$ as zero, and then we can set $\beta_0$, the intercept of the regression, as E(I($\hat{Y}$)) = P($\hat{Y}$ = 1) = $\Phi(\beta_0)$, so $\beta_0 = \Phi^{-1}(\bar{Y})$ 
+
+(c) First, we generate X from unif(0,1), and set $\beta_1$ arbitrarily, set $\beta_0$ as 0.5, and $\beta_2 = \beta_3 = 0$. Therefore, we can get our values of Y since Y ~ Ber($\Phi(X^T\beta)$). Then, by going through the glm process and calculating $\hat{\beta}/$se$(\hat{\beta})$, we find that the ratio is approximately 2 when $beta_1$ takes value 0.8. Then we use these values as starting points for $\beta$s and test our EM function. The estimates for the EM function is approximately the same as the glm estimates.
+```{r}
+library(Rlab)
+set.seed(2)
+n <- 100
+#generate X matrix
+X_1 <- matrix(runif(3*n), n, 3)
+X_0 <- as.matrix(rep(1,n))
+X <- cbind(X_0, X_1)
+#initialize betas
+beta <- matrix(c(0.5, 0.8, 0, 0))
+#calculate Pi's
+P <- pnorm(X %*% beta)
+set.seed(0)
+#generate Y vector using Pi
+Y <- rbern(n, P)
+#Form the glm test
+X_df <- cbind.data.frame(X, Y)
+names(X_df) <- c("intercept", "X1", "X2", "X3","Y")
+result <- glm(Y ~ X1 + X2 + X3, family=binomial(link="probit"),  X_df)
+summary(result)
+
+# set starting points
+b_0 <- qnorm(mean(Y))
+beta_sp <- matrix(c(b_0, 0, 0, 0))
+# the EM algorithm function
+EM <- function(beta, X, Y, eps, max_itr){
+  mu = X %*% beta
+  i = 0
+  cvg = FALSE
+  while ((!cvg) & (i < max_itr)) { 
+    beta_0 <- beta      #save the original beta for comparison
+    z_upd = ifelse( Y == 1, mu + dnorm(mu) / (1-pnorm(-mu)), mu - dnorm(mu) / pnorm(-mu)) #update on Z
+    beta = solve(t(X) %*% X) %*% t(X) %*% z_upd  #update on beta
+    cvg = max(abs(beta - beta_0)) <= eps  #set condition for convergence
+    mu = X %*% beta
+    i = i + 1
+  }
+  return(list(beta = t(beta), iterations = i, epsilon = max(abs(beta - beta_0)), convergence = cvg))
+}
+# test for the result
+EM_result = EM(beta_sp, X, Y, eps = 0.0001, max_itr = 100)
+EM_result
+
+```
+(d) Using optim() with the BFGS option, we can see that the result for the estimates is approximately the same. The EM algorithm with accuracy of $10^{-8}$ needed 40 iterations, while the optim() function with the same accuracy needed 9 iterations. Therefore, the optim function required less iterations.
+```{r}
+EM_result_d = EM(beta_sp, X, Y, eps = 0.00000001, max_itr = 100)
+EM_result_d
+MLE = function(beta, X, Y){
+  mu = X %*% beta
+  negloglike = -sum(Y*pnorm(mu, log.p=T) + (1-Y)*pnorm(-mu, log.p=T)) 
+  return(negloglike)
+}
+
+MLE_result = optim(beta_sp, MLE, X=X, Y=Y, method = "BFGS", control = list(trace = TRUE)) 
+MLE_result
+```
+
