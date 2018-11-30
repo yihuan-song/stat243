@@ -30,13 +30,13 @@ var <- var(x*w) / m  # variance of IS estimator
 var
 ```
 ###(b) 
-Using a sampling density of a t distribution, with 1 degree of freedom, centered at -4 and truncated, we can see from the histogram that the var($\hat\theta$) is small, since the histogram shows that the weights are not extreme. The var($\hat\theta$) is 0.000999, which is better than the estimation in part (a). 
+Using a sampling density of a t distribution, with 1 degree of freedom, centered at -4 and truncated, we can see from the histogram that the var($\hat\theta$) is small, since the histogram shows that the weights are not extreme. The var($\hat\theta$) is 0.000924, which is better than the estimation in part (a). 
 ```{r}
 m <- 10000 # number of samples for each estimator
 set.seed(0)
-x <- -abs(rt(m, df = 1, ncp = -4) + 4) -4 # sample from g(x) being a half-normal distribution centered at -4
+x <- -abs(rt(m, df = 1)) -4 # sample from g(x) being a half-normal distribution centered at -4
 f <- dt(x, df = 3) / pt(-4, 3)  # density of x under f
-g <- 2*dt(x, df = 1, ncp = -4)   # density of x under g
+g <- 2*dt(x + 4, df = 1)   # density of x under g
 w <- f/g  # weights
 max(w)
 #create histogram of weight
